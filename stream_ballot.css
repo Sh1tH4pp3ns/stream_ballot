@@ -1,0 +1,54 @@
+body {
+  margin: 0px;
+  font-family: {{fontName}};
+  font-size: {{fontSize}}px;
+  font-weight: {{fontWeight}};
+  color: {{fontColor}};
+  -webkit-text-stroke: {{strokeWidth}}px {{strokeColor}};
+}
+
+#container {
+  width: 100%;
+  height: 100%;
+}
+
+.spacer {
+  width: {{spacerWidth}}px;
+  display: {{graphDisplay}};
+}
+
+.relativeSpacer {
+  width: {{spacerWidth}}px;
+  display: {{relativeDisplay}};
+}
+
+.option {
+  width: 1%;
+}
+
+.graph {
+  background-color: {{graphColor}};
+  border-radius: {{graphBorderRadius}}px;
+  height: {{graphHeight}}%;
+  border-width: {{graphBorderWidth}}px;
+  border-color: {{graphBorderColor}};
+  border-style: solid;
+  transition: width {{graphAnimationDuration}}s {{graphAnimation}};
+  box-shadow: 1px 1px 2px gray;
+}
+
+.graphCol {
+  display: {{graphDisplay}};
+}
+
+.relative {
+  width: 1%;
+  text-align: right;
+  display: {{relativeDisplay}};
+}
+
+.absolute {
+  width: 1%;
+  text-align: right;
+  display: {{absoluteDisplay}};
+}
