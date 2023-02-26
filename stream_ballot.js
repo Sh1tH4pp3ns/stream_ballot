@@ -93,6 +93,8 @@ window.addEventListener('onWidgetLoad', function (obj) {
   const {fieldData} = obj.detail;
   maxDigits = fieldData["maxDigits"];
   matchLogic = fieldData["matchLogic"];
+  const percentagePosition = fieldData["percentagePosition"];
+  
   const optionKeys = [...new Set(fieldData["options"].split(",").map(option => option.trim()))].filter(option => option);
   const container = document.querySelector("#container");
   
@@ -115,29 +117,52 @@ window.addEventListener('onWidgetLoad', function (obj) {
     
     tr.appendChild(graphCol);
     
+    const graphWrapper = document.createElement("div");
+    graphWrapper.classList.add("graphWrapper");
+    graphCol.appendChild(graphWrapper);
+    
     const graph = document.createElement("div");
     graph.id = `${option}-graph`;
     graph.style.width = "0%";
     graph.classList.add("graph");
     
-    graphCol.appendChild(graph);
+    graphWrapper.appendChild(graph);
+    
+    const graphSpacer = document.createElement("div");
+    graph.appendChild(graphSpacer);
     
     const spacer2 = document.createElement("td");
     spacer2.classList.add("spacer");
     
     tr.appendChild(spacer2);
     
-    const relative = document.createElement("td");
+    const relative = document.createElement("div");
     relative.id = `${option}-relative`;
     relative.textContent = "0%";
     relative.classList.add("relative");
     
-    tr.appendChild(relative);
-    
-    const spacer3 = document.createElement("td");
-    spacer3.classList.add("relativeSpacer");
-    
-    tr.appendChild(spacer3);
+    switch(percentagePosition) {
+      case "insideCentered":
+        graph.style["justify-content"] = "center";
+        graphSpacer.style["min-width"] = "8px";
+      case "inside":
+        graph.appendChild(relative);
+        break;
+      case "beside":
+        graphWrapper.appendChild(relative);
+        break;
+      case "fixed":
+      default:
+        const relativeCol = document.createElement("td");
+        relativeCol.style.width = "1%";
+      tr.appendChild(relativeCol);
+        relativeCol.appendChild(relative);
+        
+        const spacer3 = document.createElement("td");
+        spacer3.classList.add("spacer");
+        
+        tr.appendChild(spacer3);
+    }   
     
     const absolute = document.createElement("td");
     absolute.id = `${option}-absolute`;
