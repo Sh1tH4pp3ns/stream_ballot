@@ -1,23 +1,31 @@
 const storeKey = "sh143_stream_ballot";
 let options = {};
 const values = {};
+let tiers = {};
 let maxDigits = 2;
 let matchLogic = "exact";
 let active = false;
 
 window.addEventListener('onEventReceived', function (obj) {
-    if (!obj.detail.event) {
-      return;
-    }
-    if (typeof obj.detail.event.itemId !== "undefined") {
-        obj.detail.listener = "redemption-latest"
-    }
-    const listener = obj.detail.listener.split("-")[0];
-    const event = obj.detail.event;
+  if (!obj.detail.event) {
+    return;
+  }
+  if (typeof obj.detail.event.itemId !== "undefined") {
+    obj.detail.listener = "redemption-latest"
+  }
+  
+  const listener = obj.detail.listener || obj.detail.name;
+  const event = obj.detail.event || obj.detail.data;
   
 
-  if (listener === 'tip') {
+  if (listener === 'tip-latest') {
     add(event.message, event.amount);
+  }
+  else if(listener === 'cheer-latest') {
+    add(event.message, event.amount / 100);
+  }
+  else if(listener === 'subscriber-latest') {
+    add(event.message, tiers[event.tier]);
   }
   else if(event.listener === "widget-button") {
     if(event.field === "sh143_stream_ballotReset") {
@@ -48,12 +56,12 @@ function add(message, amount) {
     return;
   }
   
-  options[option] += trimDigits(amount);
+  options[option] += amount;
   update();
 }
 
 function trimDigits(val, digits = 2) {
-  return Math.floor(val * (10 ** digits)) / (10 ** digits);
+  return Math.round(val * (10 ** digits)) / (10 ** digits);
 }
 
 function match(message) {
@@ -83,7 +91,7 @@ function match(message) {
 function update(save = true, animate = true) {
   const sum = Object.values(options).reduce((a,b) => a+b, 0);
   Object.entries(options).forEach(([option, val]) => {
-    document.querySelector(`#${option}-absolute`).textContent = val;
+    document.querySelector(`#${option}-absolute`).textContent = trimDigits(val);
     
     const percent = sum > 0 ? (val/sum) * 100 : 0;
     const graph = document.querySelector(`#${option}-graph`);
@@ -111,6 +119,15 @@ window.addEventListener('onWidgetLoad', function (obj) {
   const {fieldData} = obj.detail;
   maxDigits = fieldData["maxDigits"];
   matchLogic = fieldData["matchLogic"];
+  tiers = {
+    prime: fieldData["tier1"],
+    1: fieldData["tier1"],
+    1000: fieldData["tier1"],
+    2: fieldData["tier2"],
+    2000: fieldData["tier2"],
+    3: fieldData["tier3"],
+    3000: fieldData["tier3"]
+  }
   const valueInput = fieldData["values"];
   const percentagePosition = fieldData["percentagePosition"];
   
