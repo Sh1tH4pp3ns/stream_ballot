@@ -33,8 +33,12 @@ body {
   border-width: {{graphBorderWidth}}px;
   border-color: {{graphBorderColor}};
   border-style: solid;
-  transition: width {{graphAnimationDuration}}s {{graphAnimation}};
   box-shadow: 1px 1px 2px gray;
+  transition: width {{graphAnimationDuration}}s {{graphAnimation}};
+}
+
+.noAnimation {
+  transition: none !important;
 }
 
 .graphCol {

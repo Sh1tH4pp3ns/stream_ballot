@@ -1,4 +1,5 @@
-const options = {};
+const storeKey = "sh143_stream_ballot";
+let options = {};
 let maxDigits = 2;
 let matchLogic = "exact";
 
@@ -17,80 +18,82 @@ window.addEventListener('onEventReceived', function (obj) {
     add(event.message, event.amount);
   }
   else if(event.listener === "widget-button" && event.field === "sh143_stream_ballotReset") {
-    Object.keys(options).forEach(option => {
-      document.querySelector(`#${option}-absolute`).textContent = 0;
-      options[option] = 0;
-      SE_API.store.set(storeKey(option), 0);
-    });
-    
-    updateRelative();
+    reset();
   }
   
 });
 
-function add(message, amount) {
-  [option, val] = match(message);
-  if(!option || !amount) {
-    return;
+function reset() {
+  for(option in options) {
+    options[option] = 0;
   }
-  
-  set(option, val + amount);
+
+  update();
 }
 
-function set(option, val) {
-  if(!(option in options) || !val) {
+function add(message, amount) {
+  option = match(message);
+  if(!(option in options) || !amount) {
     return;
   }
   
-  options[option] = val;
-  document.querySelector(`#${option}-absolute`).textContent = val;
-  SE_API.store.set(storeKey(option), val);
-  
-  updateRelative();
+  options[option] += amount;
+  update();
 }
 
 function match(message) {
   switch(matchLogic) {
     case "exact":
-      return [message, options[message]];
+      return Object.keys(options).find(key => message === key);
     case "caseInsensitive":
-      return Object.entries(options).find(([key, value]) => message.toLowerCase() === key.toLowerCase()) || [];
+      return Object.keys(options).find(key => message.toLowerCase() === key.toLowerCase());
     case "startsWith":
-      return Object.entries(options).find(([key, value]) => message.startsWith(key)) || [];
+      return Object.keys(options).find(key => message.startsWith(key));
     case "startsWithCaseInsensitive":
-      return Object.entries(options).find(([key, value]) => message.toLowerCase().startsWith(key.toLowerCase())) || [];
+      return Object.keys(options).find(key => message.toLowerCase().startsWith(key.toLowerCase()));
     case "endsWith":
-      return Object.entries(options).find(([key, value]) => message.endsWith(key)) || [];
+      return Object.keys(options).find(key => message.endsWith(key));
     case "endsWithCaseInsensitive":
-      return Object.entries(options).find(([key, value]) => message.toLowerCase().endsWith(key.toLowerCase())) || [];
+      return Object.keys(options).find(key => message.toLowerCase().endsWith(key.toLowerCase()));
     case "contains":
-      return Object.entries(options).find(([key, value]) => message.includes(key)) || [];
+      return Object.keys(options).find(key => message.includes(key));
     case "containsCaseInsensitive":
-      return Object.entries(options).find(([key, value]) => message.toLowerCase().includes(key.toLowerCase())) || [];
+      return Object.keys(options).find(key => message.toLowerCase().includes(key.toLowerCase()));
       
     default:
-      return [];
+      return undefined;
   }
 }
 
-function updateRelative() {
+function update(save = true, animate = true) {
   const sum = Object.values(options).reduce((a,b) => a+b, 0);
   Object.entries(options).forEach(([option, val]) => {
+    document.querySelector(`#${option}-absolute`).textContent = val;
+    
     const percent = sum > 0 ? (val/sum) * 100 : 0;
-    document.querySelector(`#${option}-graph`).style.width = `${percent}%`;
+    const graph = document.querySelector(`#${option}-graph`);
+    if(!animate) {
+      graph.classList.add("noAnimation");
+    }
+    graph.style.width = `${percent}%`;
+    if(!animate) {
+      graph.offsetHeight;
+      graph.classList.remove("noAnimation");
+    }
     document.querySelector(`#${option}-relative`).textContent = `${Math.round(percent * (10 ** maxDigits)) / (10 ** maxDigits)}%`;
   });
-}
-
-function storeKey(option) {
-  return `sh143_stream_ballot_${option}`;
+  
+  if(save) {
+    const toBeSaved = Object.fromEntries(Object.entries(options).filter(([key, value]) => value));
+    SE_API.store.set(storeKey, toBeSaved);
+  }
 }
 
 window.addEventListener('onWidgetLoad', function (obj) {
   const {fieldData} = obj.detail;
   maxDigits = fieldData["maxDigits"];
   matchLogic = fieldData["matchLogic"];
-  optionKeys = [...new Set(fieldData["options"].split(",").map(option => option.trim()))].filter(option => option);
+  const optionKeys = [...new Set(fieldData["options"].split(",").map(option => option.trim()))].filter(option => option);
   const container = document.querySelector("#container");
   
   optionKeys.forEach(option => {
@@ -146,7 +149,13 @@ window.addEventListener('onWidgetLoad', function (obj) {
     container.appendChild(tr);
     
     options[option] = 0;
-    SE_API.store.get(storeKey(option)).then(obj => set(option, obj?.value));
+  });
+  
+  SE_API.store.get(storeKey).then(obj => {
+    const savedEntries = Object.fromEntries(Object.entries(obj || {}).filter(([key, value]) => key in options));
+    options = {...options, ...savedEntries};
+    
+    update(false, false);
   });
   
 });
