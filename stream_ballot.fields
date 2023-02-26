@@ -3,6 +3,14 @@
     "type": "text",
     "label": "Comma-Separated Options"
   },
+  "sh143_stream_Start": {
+    "type": "button",
+    "label": "Continue"
+  },
+  "sh143_stream_Stop": {
+    "type": "button",
+    "label": "Pause"
+  },
   "values": {
     "type": "text",
     "label": "Comma-Separated Values"

@@ -3,6 +3,7 @@ let options = {};
 const values = {};
 let maxDigits = 2;
 let matchLogic = "exact";
+let active = false;
 
 window.addEventListener('onEventReceived', function (obj) {
     if (!obj.detail.event) {
@@ -29,13 +30,21 @@ window.addEventListener('onEventReceived', function (obj) {
       options = {...options, ...values};
       update();
     }
+    else if(event.field === "sh143_stream_Start") {
+      active = true;
+      update();
+    }
+    else if(event.field === "sh143_stream_Stop") {
+      active = false;
+      update();
+    }
   }
   
 });
 
 function add(message, amount) {
   option = match(message);
-  if(!(option in options) || !amount) {
+  if(!(option in options) || !amount || !active) {
     return;
   }
   
@@ -89,9 +98,12 @@ function update(save = true, animate = true) {
     document.querySelector(`#${option}-relative`).textContent = `${trimDigits(percent, maxDigits)}%`;
   });
   
+  const overlay = document.querySelector("#overlay");
+  overlay.style.display = active ? "none" : "flex";
+  
   if(save) {
     const toBeSaved = Object.fromEntries(Object.entries(options).filter(([key, value]) => value));
-    SE_API.store.set(storeKey, toBeSaved);
+    SE_API.store.set(storeKey, {active, options: toBeSaved});
   }
 }
 
@@ -188,7 +200,9 @@ window.addEventListener('onWidgetLoad', function (obj) {
   });
   
   SE_API.store.get(storeKey).then(obj => {
-    const savedEntries = Object.fromEntries(Object.entries(obj || {}).filter(([key, value]) => key in options));
+    active = obj?.active || false;
+    
+    const savedEntries = Object.fromEntries(Object.entries(obj?.options || {}).filter(([key, value]) => key in options));
     options = {...options, ...savedEntries};
     
     update(false, false);

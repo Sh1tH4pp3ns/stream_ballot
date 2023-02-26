@@ -7,6 +7,26 @@ body {
   -webkit-text-stroke: {{strokeWidth}}px {{strokeColor}};
 }
 
+#overlay {
+  display: none;
+  justify-content: center;
+  align-items: center;
+  
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0,0,0,0.5);
+  z-index: 2;
+}
+
+.showOverlay {
+  display: flex;
+}
+
 #container {
   width: 100%;
   height: 100%;
