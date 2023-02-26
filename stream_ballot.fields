@@ -204,5 +204,13 @@
   "sh143_stream_ballotReset": {
     "type": "button",
     "label": "Reset"
+  },
+  "widgetName": {
+    "type": "hidden",
+    "value": "Stream Ballot"
+  },
+  "widgetAuthor": {
+    "type": "hidden",
+    "value": "Sh1t H4pp3ns"
   }
 }
