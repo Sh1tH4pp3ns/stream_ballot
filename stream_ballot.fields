@@ -3,6 +3,14 @@
     "type": "text",
     "label": "Comma-Separated Options"
   },
+  "values": {
+    "type": "text",
+    "label": "Comma-Separated Values"
+  },
+  "sh143_stream_Set": {
+    "type": "button",
+    "label": "Set Values (save beforehand)"
+  },
   "matchLogic": {
     "type": "dropdown",
     "label": "Matching Logic",
@@ -48,7 +56,6 @@
     "label": "Max Number of Digits",
     "value": 2,
     "min": 0,
-    "max": 2,
     "step": 1
   },
   "percentagePosition": {

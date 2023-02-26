@@ -1,5 +1,6 @@
 const storeKey = "sh143_stream_ballot";
 let options = {};
+const values = {};
 let maxDigits = 2;
 let matchLogic = "exact";
 
@@ -17,19 +18,20 @@ window.addEventListener('onEventReceived', function (obj) {
   if (listener === 'tip') {
     add(event.message, event.amount);
   }
-  else if(event.listener === "widget-button" && event.field === "sh143_stream_ballotReset") {
-    reset();
+  else if(event.listener === "widget-button") {
+    if(event.field === "sh143_stream_ballotReset") {
+      for(option in options) {
+        options[option] = 0;
+      }
+      update();
+    }
+    else if(event.field === "sh143_stream_Set") {
+      options = {...options, ...values};
+      update();
+    }
   }
   
 });
-
-function reset() {
-  for(option in options) {
-    options[option] = 0;
-  }
-
-  update();
-}
 
 function add(message, amount) {
   option = match(message);
@@ -37,8 +39,12 @@ function add(message, amount) {
     return;
   }
   
-  options[option] += amount;
+  options[option] += trimDigits(amount);
   update();
+}
+
+function trimDigits(val, digits = 2) {
+  return Math.floor(val * (10 ** digits)) / (10 ** digits);
 }
 
 function match(message) {
@@ -80,7 +86,7 @@ function update(save = true, animate = true) {
       graph.offsetHeight;
       graph.classList.remove("noAnimation");
     }
-    document.querySelector(`#${option}-relative`).textContent = `${Math.round(percent * (10 ** maxDigits)) / (10 ** maxDigits)}%`;
+    document.querySelector(`#${option}-relative`).textContent = `${trimDigits(percent, maxDigits)}%`;
   });
   
   if(save) {
@@ -93,12 +99,14 @@ window.addEventListener('onWidgetLoad', function (obj) {
   const {fieldData} = obj.detail;
   maxDigits = fieldData["maxDigits"];
   matchLogic = fieldData["matchLogic"];
+  const valueInput = fieldData["values"];
   const percentagePosition = fieldData["percentagePosition"];
   
   const optionKeys = [...new Set(fieldData["options"].split(",").map(option => option.trim()))].filter(option => option);
+  const filteredValues = valueInput.split(",").map(x => parseFloat(x)).map(x => isNaN(x) ? undefined : x);
   const container = document.querySelector("#container");
   
-  optionKeys.forEach(option => {
+  optionKeys.forEach((option, index) => {
     const tr = document.createElement("tr");
     
     const name = document.createElement("td");
@@ -174,6 +182,9 @@ window.addEventListener('onWidgetLoad', function (obj) {
     container.appendChild(tr);
     
     options[option] = 0;
+    if(typeof filteredValues[index] === "number") {
+      values[option] = trimDigits(filteredValues[index]);
+    }
   });
   
   SE_API.store.get(storeKey).then(obj => {
