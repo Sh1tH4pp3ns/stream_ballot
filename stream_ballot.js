@@ -79,9 +79,10 @@ function match(message) {
     case "endsWithCaseInsensitive":
       return Object.keys(options).find(key => message.toLowerCase().endsWith(key.toLowerCase()));
     case "contains":
-      return Object.keys(options).find(key => message.includes(key));
+      return message.split(" ").find(part => part in options);
     case "containsCaseInsensitive":
-      return Object.keys(options).find(key => message.toLowerCase().includes(key.toLowerCase()));
+      const lowerOptions = Object.fromEntries(Object.keys(options).map(option => [option.toLowerCase(), option]));
+      return message.toLowerCase().split(" ").map(part => lowerOptions[part]).find(option => option !== undefined);
       
     default:
       return undefined;
