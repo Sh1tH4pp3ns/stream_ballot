@@ -15,6 +15,10 @@
     "type": "text",
     "label": "Comma-Separated Values"
   },
+  "sh143_stream_Add": {
+    "type": "button",
+    "label": "Add Values (save beforehand)"
+  },
   "sh143_stream_Set": {
     "type": "button",
     "label": "Set Values (save beforehand)"

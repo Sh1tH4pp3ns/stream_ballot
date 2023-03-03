@@ -34,6 +34,10 @@ window.addEventListener('onEventReceived', function (obj) {
       }
       update();
     }
+    else if(event.field === "sh143_stream_Add") {
+      Object.entries(values).forEach(([key, value]) => options[key] += value);
+      update();
+    }
     else if(event.field === "sh143_stream_Set") {
       options = {...options, ...values};
       update();
