@@ -1,4 +1,8 @@
 {
+  "twitchToken": {
+    "type": "password",
+    "label": "Token with channel:manage:redemptions"
+  },
   "options": {
     "type": "text",
     "label": "Comma-Separated Options"

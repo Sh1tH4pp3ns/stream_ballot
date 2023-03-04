@@ -5,8 +5,16 @@ let tiers = {};
 let maxDigits = 2;
 let matchLogic = "exact";
 let active = false;
+let twitchToken = "";
+let providerId = "";
+let rewards = {};
+const scope = "channel:manage:redemptions";
+const subscription = "channel.channel_points_custom_reward_redemption.add";
+const subscriptionVersion = "1";
+let eventSubConnected = false;
 
 window.addEventListener('onEventReceived', function (obj) {
+  console.log("onEventReceived", obj.detail);
   if (!obj.detail.event) {
     return;
   }
@@ -43,10 +51,18 @@ window.addEventListener('onEventReceived', function (obj) {
       update();
     }
     else if(event.field === "sh143_stream_Start") {
+      if(!active) {
+        initRewards();
+      }
+      
       active = true;
       update();
     }
     else if(event.field === "sh143_stream_Stop") {
+      if(active) {
+        initRewards();
+      }
+      
       active = false;
       update();
     }
@@ -120,10 +136,250 @@ function update(save = true, animate = true) {
   }
 }
 
+function connectEventSub({token, client_id, user_id, rewards}) {
+  if(eventSubConnected) {
+    return;
+  }
+  
+  eventSubConnected = true;
+  
+  console.log("Connecting to EventSub");
+  
+  const ws = new WebSocket("wss://eventsub-beta.wss.twitch.tv/ws");
+  ws.onmessage = (message) => {
+    const data  = JSON.parse(message.data);
+    const { message_type }  = data.metadata;
+    
+    if(message_type === "session_welcome") {
+      console.log("message", data);
+      const session_id = data.payload.session.id;
+      twitchCreateEventSubscription(token, client_id, user_id, session_id)
+    }
+    else if(message_type === "notification" && data.payload.subscription.type === subscription) {
+      console.log("message", data);
+      const { reward } = data.payload.event;
+      const redemption_id = data.payload.event.id;
+      const option = Object.keys(options).find(option => rewardName(option) === reward.title);
+      
+      if(option) {
+        add(option, 1);
+        twitchFulfillRedemption(token, client_id, user_id, reward.id, redemption_id);
+      }
+    }
+    else if(message_type === "session_keepalive") {
+      
+    }
+    else {
+      console.log("message", data);
+    }
+    
+  }
+}
+
+function twitchCreateEventSubscription(token, client_id, user_id, session_id) {
+  const options = {
+    method: 'POST',
+    headers: {
+      'Client-Id': client_id,
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      type: subscription,
+      version: subscriptionVersion,
+      condition: {
+        broadcaster_user_id: user_id
+      },
+      transport: {
+        method: "websocket",
+        session_id: session_id
+      }
+    })
+  };
+  
+  console.log("options", options);
+
+  fetch('https://api.twitch.tv/helix/eventsub/subscriptions', options)
+    .then(response => unwrapResponse(response))
+    .then(response => console.log(response))
+    .catch(err => console.error(err));
+}
+
+function twitchFulfillRedemption(token, client_id, user_id, reward_id, redemption_id) {
+  const options = {
+    method: 'PATCH',
+    headers: {
+      'Client-Id': client_id,
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      status: "CANCELED"
+    })
+  };
+
+  fetch(`https://api.twitch.tv/helix/channel_points/custom_rewards/redemptions?broadcaster_id=${user_id}&reward_id=${reward_id}&id=${redemption_id}`, options)
+}
+
+function initRewards() {
+  twitchValidate(twitchToken)
+    .then(validate => twitchReadRewards(validate))
+    .then(rewardResponse => createRewards(rewardResponse))
+    .then(rewards => connectEventSub(rewards))
+    .catch(error => console.error(error));
+}
+
+function rewardName(option) {
+  return `Chat's Choice: ${option}`;
+}
+
+function createRewards({token, client_id, user_id, fetchedRewards}) {
+  const neededRewards = Object.keys(options).map(option => rewardName(option));
+  const unusedRewards = Object.values(fetchedRewards).filter(reward => !neededRewards.includes(reward.title));
+  console.log({fetchedRewards, neededRewards, unusedRewards});
+  
+  const promises = neededRewards.map(title => {
+    if(!(title in fetchedRewards)) {
+      const unusedReward = unusedRewards.pop();
+      if(unusedReward) {
+        // rename reward
+        console.log("updating from:", unusedReward.title, "to", title);
+        return twitchUpdateReward(token, client_id, user_id, unusedReward, {title});
+      }
+      else {
+        // create new reward
+        console.log("creating", title);
+        return twitchCreateReward(token, client_id, user_id, title);
+      }
+    }
+    else {
+      console.log("updating existing", fetchedRewards[title]);
+      return twitchUpdateReward(token, client_id, user_id, fetchedRewards[title]);
+    }
+  }) || [];
+  
+  unusedRewards.forEach(unused => {
+    console.log("deleting unused", unused.title);
+    twitchDeleteReward(token, client_id, user_id, unused);
+  });
+  
+  
+  return Promise.all(promises)
+    .then(rewards => { return {token, client_id, user_id, rewards: Object.fromEntries(rewards.map(reward => [reward.title, reward]) || [] ) } });
+}
+
+function twitchCreateReward(token, client_id, user_id, title) {
+  const options = {
+    method: 'POST',
+    headers: {
+      'Client-Id': client_id,
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+        title: title,
+        prompt: "Test für Sh1t.",
+        cost: 1,
+        is_user_input_required: false,
+        is_enabled: active,
+        is_max_per_user_per_stream_enabled: false,
+        max_per_user_per_stream: 2,
+        is_paused: false,
+        is_in_stock: true,
+        background_color: "#FF8280"
+    })
+  };
+
+  return fetch(`https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id=${user_id}`, options)
+    .then(response => unwrapResponse(response))
+    .then(response => response.data[0]);
+}
+
+function twitchUpdateReward(token, client_id, user_id, reward, update = {}) {
+  const body = { is_enabled: active, ...update };
+  const noChanges = Object.entries(body).reduce((result, [key, value]) => result && reward[key] === value, true);
+  if(noChanges) {
+    return reward;
+  }
+  
+  const options = {
+    method: 'PATCH',
+    headers: {
+      'Client-Id': client_id,
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(body)
+  };
+
+  return fetch(`https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id=${user_id}&id=${reward.id}`, options)
+    .then(response => unwrapResponse(response))
+    .then(response => response.data[0]);
+}
+
+function twitchDeleteReward(token, client_id, user_id, reward) {
+  const options = {
+    method: 'DELETE',
+    headers: {
+      'Client-Id': client_id,
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    }
+  };
+
+  return fetch(`https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id=${user_id}&id=${reward.id}`, options);
+}
+
+function twitchReadRewards({token, client_id, user_id}) {
+  const options = {
+    method: 'GET',
+    headers: {
+      'Client-Id': client_id,
+      Authorization: `Bearer ${token}`
+    }
+  };
+
+  return fetch(`https://api.twitch.tv/helix/channel_points/custom_rewards?only_manageable_rewards=true&broadcaster_id=${user_id}`, options)
+    .then(response => unwrapResponse(response))
+    .then(response => { return {token, client_id, user_id, fetchedRewards: Object.fromEntries(response.data.map(reward => [reward.title, reward])) } });
+}
+
+function twitchValidate(token) {
+  const options = {
+    method: 'GET',
+    headers: {Authorization: `Bearer ${token}`}
+  };
+
+  return fetch('https://id.twitch.tv/oauth2/validate', options)
+    .then(response => unwrapResponse(response))
+    .then(response => {
+    if(response.user_id !== providerId) {
+      console.error("Token and StreamElements channel Ids are differing", response.user_id, providerId);
+    }
+    
+    if(!response.scopes.includes(scope)) {
+      throw `Scope "${scope}" missing in token`;
+    }
+    
+    return {token, client_id: response.client_id, user_id: response.user_id};
+  });
+}
+
+function unwrapResponse(response) {
+  if([200, 202, 204].includes(response.status)) {
+    return response.json();
+  }
+
+  throw response;
+}
+
 window.addEventListener('onWidgetLoad', function (obj) {
+  console.log("onWidgetLoad", obj.detail);
   const {fieldData} = obj.detail;
   maxDigits = fieldData["maxDigits"];
   matchLogic = fieldData["matchLogic"];
+  twitchToken = fieldData["twitchToken"];
+  providerId = obj.detail.channel.providerId;
   tiers = {
     prime: fieldData["tier1"],
     1: fieldData["tier1"],
@@ -228,6 +484,7 @@ window.addEventListener('onWidgetLoad', function (obj) {
     options = {...options, ...savedEntries};
     
     update(false, false);
+    initRewards();
   });
   
 });
