@@ -1,5 +1,9 @@
 const storeKey = "sh143_stream_ballot";
+let seToken = "";
+let channelId = "";
 let options = {};
+let wasted = {};
+const twitchReward = { cost: 1, value: 1 };
 const values = {};
 let tiers = {};
 let maxDigits = 2;
@@ -12,6 +16,8 @@ const scope = "channel:manage:redemptions";
 const subscription = "channel.channel_points_custom_reward_redemption.add";
 const subscriptionVersion = "1";
 let eventSubConnected = false;
+let isEditorMode = true;
+let rewardLimit = false;
 
 window.addEventListener('onEventReceived', function (obj) {
   console.log("onEventReceived", obj.detail);
@@ -27,13 +33,24 @@ window.addEventListener('onEventReceived', function (obj) {
   
 
   if (listener === 'tip-latest') {
-    add(event.message, event.amount);
+    const redeemedOption = add(event.message, event.amount, event.name);
+    if(redeemedOption) {
+      botSay(`fukiHype ${event.name} stimmt mit ${event.amount} € für ${redeemedOption} fukiHype`); 
+    };
   }
   else if(listener === 'cheer-latest') {
-    add(event.message, event.amount / 100);
+    const redeemedOption = add(event.message, event.amount / 100, event.name);
+    
+    if(redeemedOption) {
+      botSay(`fukiHype ${event.name} stimmt mit ${event.amount} Bits für ${redeemedOption} fukiHype`); 
+    };
   }
   else if(listener === 'subscriber-latest') {
-    add(event.message, tiers[event.tier]);
+    const redeemedOption = add(event.message, tiers[event.tier], event.name);
+    
+    if(redeemedOption) {
+      botSay(`fukiHype ${event.name} stimmt mit einem Sub für ${redeemedOption} fukiHype`); 
+    };
   }
   else if(event.listener === "widget-button") {
     if(event.field === "sh143_stream_ballotReset") {
@@ -52,15 +69,15 @@ window.addEventListener('onEventReceived', function (obj) {
     }
     else if(event.field === "sh143_stream_Start") {
       if(!active) {
-        initRewards();
+        updateRewards();
       }
-      
+      console.log(isEditorMode);
       active = true;
       update();
     }
     else if(event.field === "sh143_stream_Stop") {
       if(active) {
-        initRewards();
+        updateRewards();
       }
       
       active = false;
@@ -70,14 +87,22 @@ window.addEventListener('onEventReceived', function (obj) {
   
 });
 
-function add(message, amount) {
-  option = match(message);
+function add(message, amount, username) {
+  const option = match(message);
   if(!(option in options) || !amount || !active) {
+    
+    if(amount && active) {
+      const name = username.toLowerCase();
+      wasted[name] = (wasted[name] ?? 0) + amount;
+      save();
+    }
+    
     return;
   }
   
   options[option] += amount;
   update();
+  return option;
 }
 
 function trimDigits(val, digits = 2) {
@@ -99,17 +124,18 @@ function match(message) {
     case "endsWithCaseInsensitive":
       return Object.keys(options).find(key => message.toLowerCase().endsWith(key.toLowerCase()));
     case "contains":
-      return message.split(" ").find(part => part in options);
+      return Object.keys(options).map(o => [message.indexOf(o), o]).filter(x => x[0] >= 0).sort((a, b) => a[0] - b[0]).map(x => x[1])[0];
     case "containsCaseInsensitive":
       const lowerOptions = Object.fromEntries(Object.keys(options).map(option => [option.toLowerCase(), option]));
-      return message.toLowerCase().split(" ").map(part => lowerOptions[part]).find(option => option !== undefined);
+      const found = Object.keys(lowerOptions).map(o => [message.toLowerCase().indexOf(o), o]).filter(x => x[0] >= 0).sort((a, b) => a[0] - b[0]).map(x => x[1])[0];
+      return lowerOptions[found];
       
     default:
       return undefined;
   }
 }
 
-function update(save = true, animate = true) {
+function update(saveStatus = true, animate = true) {
   const sum = Object.values(options).reduce((a,b) => a+b, 0);
   Object.entries(options).forEach(([option, val]) => {
     document.querySelector(`#${option}-absolute`).textContent = trimDigits(val);
@@ -130,44 +156,95 @@ function update(save = true, animate = true) {
   const overlay = document.querySelector("#overlay");
   overlay.style.display = active ? "none" : "flex";
   
-  if(save) {
-    const toBeSaved = Object.fromEntries(Object.entries(options).filter(([key, value]) => value));
-    SE_API.store.set(storeKey, {active, options: toBeSaved});
+  if(saveStatus) {
+    save();
   }
 }
+  
+function botSay(message) {
+  if(isEditorMode) {
+    console.log("Chat-Message:", message);
+    return;
+  }
+  
+  const token = seToken;
+  const options = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      message: message
+    })
+  };
 
-function connectEventSub({token, client_id, user_id, rewards}) {
+  fetch(`https://api.streamelements.com/kappa/v2/bot/${channelId}/say`, options);
+}
+
+function save() {
+  const toBeSaved = Object.fromEntries(Object.entries(options).filter(([key, value]) => value));
+  SE_API.store.set(storeKey, {active, options: toBeSaved, wasted});
+}
+
+function connectEventSub({token, client_id, user_id}, url = "wss://eventsub-beta.wss.twitch.tv/ws") {
   if(eventSubConnected) {
     return;
   }
   
   eventSubConnected = true;
   
-  console.log("Connecting to EventSub");
-  
-  const ws = new WebSocket("wss://eventsub-beta.wss.twitch.tv/ws");
-  ws.onmessage = (message) => {
+  const ws = new WebSocket(url);
+  ws.onmessage = async (message) => {
     const data  = JSON.parse(message.data);
     const { message_type }  = data.metadata;
     
     if(message_type === "session_welcome") {
-      console.log("message", data);
       const session_id = data.payload.session.id;
-      twitchCreateEventSubscription(token, client_id, user_id, session_id)
+      const subCreated = await twitchCreateEventSubscription(token, client_id, user_id, session_id);
+      
+      if(!isEditorMode && subCreated) {
+        // make options visible
+        
+      }
     }
     else if(message_type === "notification" && data.payload.subscription.type === subscription) {
-      console.log("message", data);
-      const { reward } = data.payload.event;
+      const { reward, user_name } = data.payload.event;
       const redemption_id = data.payload.event.id;
       const option = Object.keys(options).find(option => rewardName(option) === reward.title);
       
       if(option) {
-        add(option, 1);
-        twitchFulfillRedemption(token, client_id, user_id, reward.id, redemption_id);
+        const name = user_name.toLowerCase();
+        if(name in wasted) {
+          const amount = wasted[name];
+          delete wasted[name];
+          
+          add(option, amount, name);
+          
+          if(!isEditorMode) {
+            botSay(`fukiHype ${user_name} stimmt mit ${amount} € für ${option} fukiHype`);
+            twitchCancelRedemption(token, client_id, user_id, reward.id, redemption_id);
+          }
+        }
+        else {
+          add(option, twitchReward.value, user_name);
+          
+          if(!isEditorMode) {
+            botSay(`fukiHype ${user_name} stimmt per Twitch-Reward für ${option} fukiHype`);
+            twitchFulfillRedemption(token, client_id, user_id, reward.id, redemption_id);
+          }
+        }
       }
     }
     else if(message_type === "session_keepalive") {
       
+    }
+    else if(message_type === "session_reconnect") {
+      const { reconnect_url } = data.payload.session;
+      eventSubConnected = false;
+      connectEventSub(reconnect_url);
+      
+      setTimeout(() => ws.close(), 1500);
     }
     else {
       console.log("message", data);
@@ -176,7 +253,7 @@ function connectEventSub({token, client_id, user_id, rewards}) {
   }
 }
 
-function twitchCreateEventSubscription(token, client_id, user_id, session_id) {
+async function twitchCreateEventSubscription(token, client_id, user_id, session_id) {
   const options = {
     method: 'POST',
     headers: {
@@ -196,16 +273,20 @@ function twitchCreateEventSubscription(token, client_id, user_id, session_id) {
       }
     })
   };
-  
-  console.log("options", options);
 
-  fetch('https://api.twitch.tv/helix/eventsub/subscriptions', options)
-    .then(response => unwrapResponse(response))
-    .then(response => console.log(response))
-    .catch(err => console.error(err));
+  const response = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', options);
+  return response.ok;
 }
 
-function twitchFulfillRedemption(token, client_id, user_id, reward_id, redemption_id) {
+async function twitchCancelRedemption(token, client_id, user_id, reward_id, redemption_id) {
+  await twitchUpdateRedemptionStatus(token, client_id, user_id, reward_id, redemption_id, "CANCELED");
+}
+
+async function twitchFulfillRedemption(token, client_id, user_id, reward_id, redemption_id) {
+  await twitchUpdateRedemptionStatus(token, client_id, user_id, reward_id, redemption_id, "FULFILLED");
+}
+
+async function twitchUpdateRedemptionStatus(token, client_id, user_id, reward_id, redemption_id, status) {
   const options = {
     method: 'PATCH',
     headers: {
@@ -214,61 +295,87 @@ function twitchFulfillRedemption(token, client_id, user_id, reward_id, redemptio
       Authorization: `Bearer ${token}`
     },
     body: JSON.stringify({
-      status: "CANCELED"
+      status: status
     })
   };
 
-  fetch(`https://api.twitch.tv/helix/channel_points/custom_rewards/redemptions?broadcaster_id=${user_id}&reward_id=${reward_id}&id=${redemption_id}`, options)
+  await fetch(`https://api.twitch.tv/helix/channel_points/custom_rewards/redemptions?broadcaster_id=${user_id}&reward_id=${reward_id}&id=${redemption_id}`, options);
 }
 
-function initRewards() {
-  twitchValidate(twitchToken)
-    .then(validate => twitchReadRewards(validate))
-    .then(rewardResponse => createRewards(rewardResponse))
-    .then(rewards => connectEventSub(rewards))
-    .catch(error => console.error(error));
+async function updateRewards() {
+  try {
+    const token = twitchToken;
+    const rewardPerOption = true;
+    
+    const { client_id, user_id } = await twitchValidate(token);
+    
+    if(!isEditorMode) {
+      const existingRewards = await twitchReadRewards(token, client_id, user_id);
+      const rewardPlan = planRewards(options, existingRewards, rewardPerOption);
+      await applyRewardPlan(token, client_id, user_id, rewardPlan);
+    }
+    
+    // connect to EventSub
+    connectEventSub({token, client_id, user_id});
+  }
+  catch (error) {
+    console.error(error);
+  }
+  
+}
+
+async function applyRewardPlan(token, client_id, user_id, rewardPlan) {
+  for (const reward of rewardPlan.delete) {
+    await twitchDeleteReward(token, client_id, user_id, reward);
+  }
+  
+  const promises = [];
+  rewardPlan.update.forEach(update => promises.push(twitchUpdateReward(token, client_id, user_id, update.reward, {title: update.title})));
+  rewardPlan.create.forEach(title => promises.push(twitchCreateReward(token, client_id, user_id, title, rewardPlan.rewardPerOption)));
+  
+  await Promise.all(promises);
 }
 
 function rewardName(option) {
   return `Chat's Choice: ${option}`;
 }
 
-function createRewards({token, client_id, user_id, fetchedRewards}) {
-  const neededRewards = Object.keys(options).map(option => rewardName(option));
-  const unusedRewards = Object.values(fetchedRewards).filter(reward => !neededRewards.includes(reward.title));
-  console.log({fetchedRewards, neededRewards, unusedRewards});
+function planRewards(options, rawRewards, rewardPerOption) {
+  const neededRewards = rewardPerOption ? Object.keys(options).map(option => rewardName(option)) : ["Chat's Choice"];
+  const existingRewards = Object.fromEntries(rawRewards.map(reward => [reward.title, reward]));
+  const unusedRewards = rawRewards.filter(reward => !neededRewards.includes(reward.title));
   
-  const promises = neededRewards.map(title => {
-    if(!(title in fetchedRewards)) {
+  const create = [];
+  const update = [];
+  const deleteRewards = [];
+  
+  neededRewards.forEach(title => {
+    if(!(title in existingRewards)) {
       const unusedReward = unusedRewards.pop();
       if(unusedReward) {
         // rename reward
-        console.log("updating from:", unusedReward.title, "to", title);
-        return twitchUpdateReward(token, client_id, user_id, unusedReward, {title});
+        update.push({ title, reward: unusedReward });
       }
       else {
         // create new reward
-        console.log("creating", title);
-        return twitchCreateReward(token, client_id, user_id, title);
+        create.push(title);
       }
     }
     else {
-      console.log("updating existing", fetchedRewards[title]);
-      return twitchUpdateReward(token, client_id, user_id, fetchedRewards[title]);
+      // update reward with matching title
+      update.push({ title, reward: existingRewards[title] });
     }
-  }) || [];
-  
-  unusedRewards.forEach(unused => {
-    console.log("deleting unused", unused.title);
-    twitchDeleteReward(token, client_id, user_id, unused);
   });
   
+  unusedRewards.forEach(unused => {
+    // delete this reward
+    deleteRewards.push(unused);
+  });
   
-  return Promise.all(promises)
-    .then(rewards => { return {token, client_id, user_id, rewards: Object.fromEntries(rewards.map(reward => [reward.title, reward]) || [] ) } });
+  return { create, update, delete: deleteRewards };
 }
 
-function twitchCreateReward(token, client_id, user_id, title) {
+async function twitchCreateReward(token, client_id, user_id, title) {
   const options = {
     method: 'POST',
     headers: {
@@ -278,11 +385,11 @@ function twitchCreateReward(token, client_id, user_id, title) {
     },
     body: JSON.stringify({
         title: title,
-        prompt: "Test für Sh1t.",
-        cost: 1,
+        prompt: "",
+        cost: twitchReward.cost,
         is_user_input_required: false,
         is_enabled: active,
-        is_max_per_user_per_stream_enabled: false,
+        is_max_per_user_per_stream_enabled: rewardLimit,
         max_per_user_per_stream: 2,
         is_paused: false,
         is_in_stock: true,
@@ -290,13 +397,25 @@ function twitchCreateReward(token, client_id, user_id, title) {
     })
   };
 
-  return fetch(`https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id=${user_id}`, options)
-    .then(response => unwrapResponse(response))
-    .then(response => response.data[0]);
+  const response = await fetch(`https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id=${user_id}`, options);
+  const result = await unwrapResponse(response);
+  
+  return result.data[0]
 }
 
-function twitchUpdateReward(token, client_id, user_id, reward, update = {}) {
-  const body = { is_enabled: active, ...update };
+async function twitchUpdateReward(token, client_id, user_id, reward, update = {}) {
+  const body = { 
+    prompt: "",
+    cost: twitchReward.cost,
+    is_user_input_required: false,
+    is_enabled: active,
+    is_max_per_user_per_stream_enabled: rewardLimit,
+    max_per_user_per_stream: 2,
+    is_paused: false,
+    is_in_stock: true,
+    background_color: "#FF8280",
+    ...update
+  };
   const noChanges = Object.entries(body).reduce((result, [key, value]) => result && reward[key] === value, true);
   if(noChanges) {
     return reward;
@@ -312,9 +431,10 @@ function twitchUpdateReward(token, client_id, user_id, reward, update = {}) {
     body: JSON.stringify(body)
   };
 
-  return fetch(`https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id=${user_id}&id=${reward.id}`, options)
-    .then(response => unwrapResponse(response))
-    .then(response => response.data[0]);
+  const response = await fetch(`https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id=${user_id}&id=${reward.id}`, options);
+  const result = await unwrapResponse(response);
+  
+  return result.data[0];
 }
 
 function twitchDeleteReward(token, client_id, user_id, reward) {
@@ -330,7 +450,7 @@ function twitchDeleteReward(token, client_id, user_id, reward) {
   return fetch(`https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id=${user_id}&id=${reward.id}`, options);
 }
 
-function twitchReadRewards({token, client_id, user_id}) {
+async function twitchReadRewards(token, client_id, user_id) {
   const options = {
     method: 'GET',
     headers: {
@@ -338,48 +458,54 @@ function twitchReadRewards({token, client_id, user_id}) {
       Authorization: `Bearer ${token}`
     }
   };
-
-  return fetch(`https://api.twitch.tv/helix/channel_points/custom_rewards?only_manageable_rewards=true&broadcaster_id=${user_id}`, options)
-    .then(response => unwrapResponse(response))
-    .then(response => { return {token, client_id, user_id, fetchedRewards: Object.fromEntries(response.data.map(reward => [reward.title, reward])) } });
+  
+  const response = await fetch(`https://api.twitch.tv/helix/channel_points/custom_rewards?only_manageable_rewards=true&broadcaster_id=${user_id}`, options);
+  const result = await unwrapResponse(response);
+  
+  return result.data || [];
 }
 
-function twitchValidate(token) {
+async function twitchValidate(token) {
   const options = {
     method: 'GET',
     headers: {Authorization: `Bearer ${token}`}
   };
 
-  return fetch('https://id.twitch.tv/oauth2/validate', options)
-    .then(response => unwrapResponse(response))
-    .then(response => {
-    if(response.user_id !== providerId) {
-      console.error("Token and StreamElements channel Ids are differing", response.user_id, providerId);
-    }
-    
-    if(!response.scopes.includes(scope)) {
-      throw `Scope "${scope}" missing in token`;
-    }
-    
-    return {token, client_id: response.client_id, user_id: response.user_id};
-  });
-}
-
-function unwrapResponse(response) {
-  if([200, 202, 204].includes(response.status)) {
-    return response.json();
+  const response = await fetch('https://id.twitch.tv/oauth2/validate', options);
+  const result = await unwrapResponse(response);
+  
+  if(result.user_id !== providerId) {
+    console.error("Token and StreamElements channel Ids are differing", result.user_id, providerId);
   }
 
-  throw response;
+  if(!result.scopes.includes(scope)) {
+    throw `Scope "${scope}" missing in token`;
+  }
+  
+  return result;
 }
 
-window.addEventListener('onWidgetLoad', function (obj) {
+async function unwrapResponse(response) {
+  if(!response.ok) {
+    throw response;
+  }
+  
+  return await response.json();
+}
+
+window.addEventListener('onWidgetLoad', async function (obj) {
   console.log("onWidgetLoad", obj.detail);
+  isEditorMode = obj.detail.overlay.isEditorMode;
   const {fieldData} = obj.detail;
+  twitchReward.cost = fieldData["rewardCost"];
+  twitchReward.value = fieldData["rewardValue"];
   maxDigits = fieldData["maxDigits"];
   matchLogic = fieldData["matchLogic"];
+  seToken = fieldData["seToken"];
   twitchToken = fieldData["twitchToken"];
+  rewardLimit = fieldData["rewardLimit"] || false;
   providerId = obj.detail.channel.providerId;
+  channelId = obj.detail.channel.id;
   tiers = {
     prime: fieldData["tier1"],
     1: fieldData["tier1"],
@@ -479,12 +605,12 @@ window.addEventListener('onWidgetLoad', function (obj) {
   
   SE_API.store.get(storeKey).then(obj => {
     active = obj?.active || false;
-    
+    wasted = obj?.wasted || {};
     const savedEntries = Object.fromEntries(Object.entries(obj?.options || {}).filter(([key, value]) => key in options));
     options = {...options, ...savedEntries};
     
     update(false, false);
-    initRewards();
+    updateRewards();
   });
   
 });
