@@ -56,6 +56,13 @@
     "type": "checkbox",
     "label": "Limit Reward per User per Stream"
   },
+  "rewardLimitNumber": {
+    "type": "number",
+    "label": "Redemptions per User per Stream",
+    "value": 1,
+    "min": 1,
+    "step": 1
+  },
   "rewardCost": {
     "type": "number",
     "label": "Twitch Reward Cost",

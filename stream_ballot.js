@@ -18,6 +18,7 @@ const subscriptionVersion = "1";
 let eventSubConnected = false;
 let isEditorMode = true;
 let rewardLimit = false;
+let rewardLimitNumber = 1;
 
 window.addEventListener('onEventReceived', function (obj) {
   console.log("onEventReceived", obj.detail);
@@ -390,7 +391,7 @@ async function twitchCreateReward(token, client_id, user_id, title) {
         is_user_input_required: false,
         is_enabled: active,
         is_max_per_user_per_stream_enabled: rewardLimit,
-        max_per_user_per_stream: 2,
+        max_per_user_per_stream: rewardLimitNumber,
         is_paused: false,
         is_in_stock: true,
         background_color: "#FF8280"
@@ -410,7 +411,7 @@ async function twitchUpdateReward(token, client_id, user_id, reward, update = {}
     is_user_input_required: false,
     is_enabled: active,
     is_max_per_user_per_stream_enabled: rewardLimit,
-    max_per_user_per_stream: 2,
+    max_per_user_per_stream: rewardLimitNumber,
     is_paused: false,
     is_in_stock: true,
     background_color: "#FF8280",
@@ -504,6 +505,7 @@ window.addEventListener('onWidgetLoad', async function (obj) {
   seToken = fieldData["seToken"];
   twitchToken = fieldData["twitchToken"];
   rewardLimit = fieldData["rewardLimit"] || false;
+  rewardLimitNumber = fieldData["rewardLimitNumber"] || 1;
   providerId = obj.detail.channel.providerId;
   channelId = obj.detail.channel.id;
   tiers = {
