@@ -1,24 +1,12 @@
 const storeKey = "sh143_stream_ballot";
-let seToken = "";
-let channelId = "";
-let options = {};
-let wasted = {};
-const twitchReward = { cost: 1, value: 1 };
-const values = {};
-let tiers = {};
-let maxDigits = 2;
-let matchLogic = "exact";
-let active = false;
-let twitchToken = "";
-let providerId = "";
-let rewards = {};
 const scope = "channel:manage:redemptions";
 const subscription = "channel.channel_points_custom_reward_redemption.add";
 const subscriptionVersion = "1";
-let eventSubConnected = false;
-let isEditorMode = true;
-let rewardLimit = false;
-let rewardLimitNumber = 1;
+
+const se = {};
+const widget = {
+  eventSubConnected: false
+};
 
 window.addEventListener('onEventReceived', function (obj) {
   console.log("onEventReceived", obj.detail);
@@ -63,33 +51,33 @@ window.addEventListener('onEventReceived', function (obj) {
   }
   else if(event.listener === "widget-button") {
     if(event.field === "sh143_stream_ballotReset") {
-      for(option in options) {
-        options[option] = 0;
+      for(option in widget.options) {
+        widget.options[option] = 0;
       }
       update();
     }
     else if(event.field === "sh143_stream_Add") {
-      Object.entries(values).forEach(([key, value]) => options[key] += value);
+      Object.entries(widget.values).forEach(([key, value]) => widget.options[key] += value);
       update();
     }
     else if(event.field === "sh143_stream_Set") {
-      options = {...options, ...values};
+      widget.options = {...widget.options, ...widget.values};
       update();
     }
     else if(event.field === "sh143_stream_Start") {
-      if(!active) {
+      if(!widget.active) {
         updateRewards();
       }
-      console.log(isEditorMode);
-      active = true;
+
+      widget.active = true;
       update();
     }
     else if(event.field === "sh143_stream_Stop") {
-      if(active) {
+      if(widget.active) {
         updateRewards();
       }
       
-      active = false;
+      widget.active = false;
       update();
     }
   }
@@ -98,11 +86,11 @@ window.addEventListener('onEventReceived', function (obj) {
 
 function add(message, amount, username) {
   const option = match(message);
-  if(!(option in options) || !amount || !active) {
+  if(!(option in widget.options) || !amount || !active) {
     
     if(amount && active) {
       const name = username.toLowerCase();
-      wasted[name] = (wasted[name] ?? 0) + amount;
+      widget.wasted[name] = (widget.wasted[name] ?? 0) + amount;
       save();
 
       if(!isEditorMode) {
@@ -113,7 +101,7 @@ function add(message, amount, username) {
     return;
   }
   
-  options[option] += amount;
+  widget.options[option] += amount;
   update();
   return option;
 }
@@ -123,23 +111,23 @@ function trimDigits(val, digits = 2) {
 }
 
 function match(message) {
-  switch(matchLogic) {
+  switch(se.fieldData.matchLogic) {
     case "exact":
-      return Object.keys(options).find(key => message === key);
+      return Object.keys(widget.options).find(key => message === key);
     case "caseInsensitive":
-      return Object.keys(options).find(key => message.toLowerCase() === key.toLowerCase());
+      return Object.keys(widget.options).find(key => message.toLowerCase() === key.toLowerCase());
     case "startsWith":
-      return Object.keys(options).find(key => message.startsWith(key));
+      return Object.keys(widget.options).find(key => message.startsWith(key));
     case "startsWithCaseInsensitive":
-      return Object.keys(options).find(key => message.toLowerCase().startsWith(key.toLowerCase()));
+      return Object.keys(widget.options).find(key => message.toLowerCase().startsWith(key.toLowerCase()));
     case "endsWith":
-      return Object.keys(options).find(key => message.endsWith(key));
+      return Object.keys(widget.options).find(key => message.endsWith(key));
     case "endsWithCaseInsensitive":
-      return Object.keys(options).find(key => message.toLowerCase().endsWith(key.toLowerCase()));
+      return Object.keys(widget.options).find(key => message.toLowerCase().endsWith(key.toLowerCase()));
     case "contains":
-      return Object.keys(options).map(o => [message.indexOf(o), o]).filter(x => x[0] >= 0).sort((a, b) => a[0] - b[0]).map(x => x[1])[0];
+      return Object.keys(widget.options).map(o => [message.indexOf(o), o]).filter(x => x[0] >= 0).sort((a, b) => a[0] - b[0]).map(x => x[1])[0];
     case "containsCaseInsensitive":
-      const lowerOptions = Object.fromEntries(Object.keys(options).map(option => [option.toLowerCase(), option]));
+      const lowerOptions = Object.fromEntries(Object.keys(widget.options).map(option => [option.toLowerCase(), option]));
       const found = Object.keys(lowerOptions).map(o => [message.toLowerCase().indexOf(o), o]).filter(x => x[0] >= 0).sort((a, b) => a[0] - b[0]).map(x => x[1])[0];
       return lowerOptions[found];
       
@@ -149,8 +137,8 @@ function match(message) {
 }
 
 function update(saveStatus = true, animate = true) {
-  const sum = Object.values(options).reduce((a,b) => a+b, 0);
-  Object.entries(options).forEach(([option, val]) => {
+  const sum = Object.values(widget.options).reduce((a,b) => a+b, 0);
+  Object.entries(widget.options).forEach(([option, val]) => {
     document.querySelector(`#${option}-absolute`).textContent = trimDigits(val);
     
     const percent = sum > 0 ? (val/sum) * 100 : 0;
@@ -163,7 +151,7 @@ function update(saveStatus = true, animate = true) {
       graph.offsetHeight;
       graph.classList.remove("noAnimation");
     }
-    document.querySelector(`#${option}-relative`).textContent = `${trimDigits(percent, maxDigits)}%`;
+    document.querySelector(`#${option}-relative`).textContent = `${trimDigits(percent, se.fieldData.maxDigits)}%`;
   });
   
   const overlay = document.querySelector("#overlay");
@@ -175,12 +163,12 @@ function update(saveStatus = true, animate = true) {
 }
   
 function botSay(message) {
-  if(isEditorMode) {
+  if(se.overlay.isEditorMode) {
     console.log("Chat-Message:", message);
     return;
   }
   
-  const token = seToken;
+  const token = se.fieldData.seToken;
   const options = {
     method: 'POST',
     headers: {
@@ -192,20 +180,20 @@ function botSay(message) {
     })
   };
 
-  fetch(`https://api.streamelements.com/kappa/v2/bot/${channelId}/say`, options);
+  fetch(`https://api.streamelements.com/kappa/v2/bot/${se.channel.id}/say`, options);
 }
 
 function save() {
-  const toBeSaved = Object.fromEntries(Object.entries(options).filter(([key, value]) => value));
-  SE_API.store.set(storeKey, {active, options: toBeSaved, wasted});
+  const toBeSaved = Object.fromEntries(Object.entries(widget.options).filter(([key, value]) => value));
+  SE_API.store.set(storeKey, {active: widget.active, options: toBeSaved, wasted: widget.wasted});
 }
 
 function connectEventSub({token, client_id, user_id}, url = "wss://eventsub-beta.wss.twitch.tv/ws") {
-  if(eventSubConnected) {
+  if(widget.eventSubConnected) {
     return;
   }
   
-  eventSubConnected = true;
+  widget.eventSubConnected = true;
   
   const ws = new WebSocket(url);
   ws.onmessage = async (message) => {
@@ -224,25 +212,25 @@ function connectEventSub({token, client_id, user_id}, url = "wss://eventsub-beta
     else if(message_type === "notification" && data.payload.subscription.type === subscription) {
       const { reward, user_name } = data.payload.event;
       const redemption_id = data.payload.event.id;
-      const option = Object.keys(options).find(option => rewardName(option) === reward.title);
+      const option = Object.keys(widget.options).find(option => rewardName(option) === reward.title);
       
       if(option) {
         const name = user_name.toLowerCase();
-        if(name in wasted) {
-          const amount = wasted[name];
-          delete wasted[name];
+        if(name in widget.wasted) {
+          const amount = widget.wasted[name];
+          delete widget.wasted[name];
           
           add(option, amount, user_name);
           
-          if(!isEditorMode) {
+          if(!se.overlay.isEditorMode) {
             botSay(`fukiHype ${user_name} löst verlorene ${amount} € für ${option} ein, erhält die Kanalpunkte zurück und kann noch einmal abstimmen fukiHype`);
             twitchCancelRedemption(token, client_id, user_id, reward.id, redemption_id);
           }
         }
         else {
-          add(option, twitchReward.value, user_name);
+          add(option, se.fieldData.rewardValue, user_name);
           
-          if(!isEditorMode) {
+          if(!se.overlay.isEditorMode) {
             botSay(`fukiHype ${user_name} stimmt per Twitch-Reward für ${option} fukiHype`);
             twitchFulfillRedemption(token, client_id, user_id, reward.id, redemption_id);
           }
@@ -254,7 +242,7 @@ function connectEventSub({token, client_id, user_id}, url = "wss://eventsub-beta
     }
     else if(message_type === "session_reconnect") {
       const { reconnect_url } = data.payload.session;
-      eventSubConnected = false;
+      widget.eventSubConnected = false;
       connectEventSub(reconnect_url);
       
       setTimeout(() => ws.close(), 1500);
@@ -295,11 +283,15 @@ async function twitchCancelRedemption(token, client_id, user_id, reward_id, rede
   await twitchUpdateRedemptionStatus(token, client_id, user_id, reward_id, redemption_id, "CANCELED");
 }
 
-async function twitchFulfillRedemption(token, client_id, user_id, reward_id, redemption_id) {
+async function twitchFulfillRedemption(token, client_id, user_id, reward_id, redemption_id) {  
   await twitchUpdateRedemptionStatus(token, client_id, user_id, reward_id, redemption_id, "FULFILLED");
 }
 
 async function twitchUpdateRedemptionStatus(token, client_id, user_id, reward_id, redemption_id, status) {
+  if(se.overlay.isEditorMode) {
+    return;
+  }
+
   const options = {
     method: 'PATCH',
     headers: {
@@ -317,12 +309,12 @@ async function twitchUpdateRedemptionStatus(token, client_id, user_id, reward_id
 
 async function updateRewards() {
   try {
-    const token = twitchToken;
+    const token = se.fieldData.twitchToken;
     const rewardPerOption = true;
     
     const { client_id, user_id } = await twitchValidate(token);
     
-    if(!isEditorMode) {
+    if(!se.overlay.isEditorMode) {
       const existingRewards = await twitchReadRewards(token, client_id, user_id);
       const rewardPlan = planRewards(options, existingRewards, rewardPerOption);
       await applyRewardPlan(token, client_id, user_id, rewardPlan);
@@ -338,6 +330,10 @@ async function updateRewards() {
 }
 
 async function applyRewardPlan(token, client_id, user_id, rewardPlan) {
+  if(se.overlay.isEditorMode) {
+    return;
+  }
+
   for (const reward of rewardPlan.delete) {
     await twitchDeleteReward(token, client_id, user_id, reward);
   }
@@ -399,11 +395,11 @@ async function twitchCreateReward(token, client_id, user_id, title) {
     body: JSON.stringify({
         title: title,
         prompt: "",
-        cost: twitchReward.cost,
+        cost: se.fieldData.rewardCost,
         is_user_input_required: false,
         is_enabled: active,
-        is_max_per_user_per_stream_enabled: rewardLimit,
-        max_per_user_per_stream: rewardLimitNumber,
+        is_max_per_user_per_stream_enabled: se.fieldData.rewardLimit,
+        max_per_user_per_stream: se.fieldData.rewardLimitNumber,
         is_paused: false,
         is_in_stock: true,
         background_color: "#FF8280"
@@ -422,8 +418,8 @@ async function twitchUpdateReward(token, client_id, user_id, reward, update = {}
     cost: twitchReward.cost,
     is_user_input_required: false,
     is_enabled: active,
-    is_max_per_user_per_stream_enabled: rewardLimit,
-    max_per_user_per_stream: rewardLimitNumber,
+    is_max_per_user_per_stream_enabled: se.fieldData.rewardLimit,
+    max_per_user_per_stream: se.fieldData.rewardLimitNumber,
     is_paused: false,
     is_in_stock: true,
     background_color: "#FF8280",
@@ -487,8 +483,8 @@ async function twitchValidate(token) {
   const response = await fetch('https://id.twitch.tv/oauth2/validate', options);
   const result = await unwrapResponse(response);
   
-  if(result.user_id !== providerId) {
-    console.error("Token and StreamElements channel Ids are differing", result.user_id, providerId);
+  if(result.user_id !== se.channel.providerId) {
+    console.error("Token and StreamElements channel Ids are differing", result.user_id, se.channel.providerId);
   }
 
   if(!result.scopes.includes(scope)) {
@@ -507,33 +503,23 @@ async function unwrapResponse(response) {
 }
 
 window.addEventListener('onWidgetLoad', async function (obj) {
-  console.log("onWidgetLoad", obj.detail);
-  isEditorMode = obj.detail.overlay.isEditorMode;
-  const {fieldData} = obj.detail;
-  twitchReward.cost = fieldData["rewardCost"];
-  twitchReward.value = fieldData["rewardValue"];
-  maxDigits = fieldData["maxDigits"];
-  matchLogic = fieldData["matchLogic"];
-  seToken = fieldData["seToken"];
-  twitchToken = fieldData["twitchToken"];
-  rewardLimit = fieldData["rewardLimit"] || false;
-  rewardLimitNumber = fieldData["rewardLimitNumber"] || 1;
-  providerId = obj.detail.channel.providerId;
-  channelId = obj.detail.channel.id;
-  tiers = {
-    prime: fieldData["tier1"],
-    1: fieldData["tier1"],
-    1000: fieldData["tier1"],
-    2: fieldData["tier2"],
-    2000: fieldData["tier2"],
-    3: fieldData["tier3"],
-    3000: fieldData["tier3"]
+  Object.entries(obj.detail).forEach(([key, value]) => se[key] = value);
+
+  se.fieldData.rewardLimit ||= false;
+  se.fieldData.rewardLimitNumber ||= 1;
+
+  widget.tiers = {
+    prime: se.fieldData.tier1,
+    1: se.fieldData.tier1,
+    1000: se.fieldData.tier1,
+    2: se.fieldData.tier2,
+    2000: se.fieldData.tier2,
+    3: se.fieldData.tier3,
+    3000: se.fieldData.tier3
   }
-  const valueInput = fieldData["values"];
-  const percentagePosition = fieldData["percentagePosition"];
   
-  const optionKeys = [...new Set(fieldData["options"].split(",").map(option => option.trim()))].filter(option => option);
-  const filteredValues = valueInput.split(",").map(x => parseFloat(x)).map(x => isNaN(x) ? undefined : x);
+  const optionKeys = [...new Set(se.fieldData.options.split(",").map(option => option.trim()))].filter(option => option);
+  const filteredValues = se.fieldData.values.split(",").map(x => parseFloat(x)).map(x => isNaN(x) ? undefined : x);
   const container = document.querySelector("#container");
   
   optionKeys.forEach((option, index) => {
@@ -579,7 +565,7 @@ window.addEventListener('onWidgetLoad', async function (obj) {
     relative.textContent = "0%";
     relative.classList.add("relative");
     
-    switch(percentagePosition) {
+    switch(se.fieldData.percentagePosition) {
       case "insideCentered":
         graph.style["justify-content"] = "center";
         graphSpacer.style["min-width"] = "8px";
@@ -611,17 +597,18 @@ window.addEventListener('onWidgetLoad', async function (obj) {
     
     container.appendChild(tr);
     
-    options[option] = 0;
-    if(typeof filteredValues[index] === "number") {
-      values[option] = trimDigits(filteredValues[index]);
+    widget.options[option] = 0;
+    const value = filteredValues[index]
+    if(typeof value === "number") {
+      se.widget.values[option] = trimDigits(value);
     }
   });
   
   SE_API.store.get(storeKey).then(obj => {
-    active = obj?.active || false;
-    wasted = obj?.wasted || {};
-    const savedEntries = Object.fromEntries(Object.entries(obj?.options || {}).filter(([key, value]) => key in options));
-    options = {...options, ...savedEntries};
+    widget.active = obj?.active || false;
+    widget.wasted = obj?.wasted || {};
+    const savedEntries = Object.fromEntries(Object.entries(obj?.options || {}).filter(([key, value]) => key in widget.options));
+    widget.options = {...widget.options, ...savedEntries};
     
     update(false, false);
     updateRewards();
