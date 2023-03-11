@@ -47,10 +47,16 @@ window.addEventListener('onEventReceived', function (obj) {
     };
   }
   else if(listener === 'subscriber-latest') {
-    const redeemedOption = add(event.message, tiers[event.tier], event.name);
+    if(event.bulkGifted) {
+      // initial bulk gift message
+      return;
+    }
+    const name = event.gifted ? event.sender : event.name;
+
+    const redeemedOption = add(event.message, tiers[event.tier], name);
     
     if(redeemedOption) {
-      botSay(`fukiHype ${event.name} stimmt mit einem Sub für ${redeemedOption} fukiHype`); 
+      botSay(`fukiHype ${name} stimmt mit einem ${event.gifted ? "Gift-" : ""}Sub für ${redeemedOption} fukiHype`); 
     };
   }
   else if(event.listener === "widget-button") {
