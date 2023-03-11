@@ -226,10 +226,10 @@ function connectEventSub({token, client_id, user_id}, url = "wss://eventsub-beta
           const amount = wasted[name];
           delete wasted[name];
           
-          add(option, amount, name);
+          add(option, amount, user_name);
           
           if(!isEditorMode) {
-            botSay(`fukiHype ${user_name} stimmt mit ${amount} € für ${option} fukiHype`);
+            botSay(`fukiHype ${user_name} löst verlorene ${amount} € für ${option} ein, erhält die Kanalpunkte zurück und kann noch einmal abstimmen fukiHype`);
             twitchCancelRedemption(token, client_id, user_id, reward.id, redemption_id);
           }
         }
