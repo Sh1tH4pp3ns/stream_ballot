@@ -102,6 +102,10 @@ function add(message, amount, username) {
       const name = username.toLowerCase();
       wasted[name] = (wasted[name] ?? 0) + amount;
       save();
+
+      if(!isEditorMode) {
+        botSay(`@${username} dein Support konnte leider nicht zugeordnet werden, du kannst ihn aber per Twitch-Reward einlösen. !choice für mehr Infos.`);
+      }
     }
     
     return;
