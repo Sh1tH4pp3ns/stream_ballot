@@ -21,7 +21,6 @@ let rewardLimit = false;
 let rewardLimitNumber = 1;
 
 window.addEventListener('onEventReceived', function (obj) {
-  console.log("onEventReceived", obj.detail);
   if (!obj.detail.event) {
     return;
   }
@@ -80,7 +79,7 @@ window.addEventListener('onEventReceived', function (obj) {
       if(!active) {
         updateRewards();
       }
-      console.log(isEditorMode);
+
       active = true;
       update();
     }
@@ -91,6 +90,31 @@ window.addEventListener('onEventReceived', function (obj) {
       
       active = false;
       update();
+    }
+  }
+  else if(active && listener === "kvstore:update" && event.data.key === `customWidget.${storeKey}_cmd`) {
+    const { type, data } = event.data.value;
+
+    if(type === "discard") {
+      const { name } = data;
+      delete wasted[name];
+      save();
+    }
+    else if(type === "redeem") {
+      const { name, option } = data;
+      const amount = wasted[name];
+      
+      if(!amount || !match(option)) {
+        return;
+      }
+      
+      delete wasted[name];
+      
+      const redeemedOption = add(option, amount, name);
+      if(redeemedOption) {
+        botSay(`fukiHype Fuki löst im Namen von ${name} verlorene ${amount} € für ${redeemedOption} ein fukiHype`);
+      }
+
     }
   }
   
@@ -105,9 +129,7 @@ function add(message, amount, username) {
       wasted[name] = (wasted[name] ?? 0) + amount;
       save();
 
-      if(!isEditorMode) {
-        botSay(`@${username} dein Support konnte leider nicht zugeordnet werden, du kannst ihn aber per Twitch-Reward einlösen. !choice für mehr Infos.`);
-      }
+      botSay(`@${username} dein Support konnte leider nicht zugeordnet werden, du kannst ihn aber per Twitch-Reward einlösen. !choice für mehr Infos.`);
     }
     
     return;
@@ -196,8 +218,7 @@ function botSay(message) {
 }
 
 function save() {
-  const toBeSaved = Object.fromEntries(Object.entries(options).filter(([key, value]) => value));
-  SE_API.store.set(storeKey, {active, options: toBeSaved, wasted});
+  SE_API.store.set(storeKey, {active, options, wasted});
 }
 
 function connectEventSub({token, client_id, user_id}, url = "wss://eventsub-beta.wss.twitch.tv/ws") {
