@@ -342,6 +342,7 @@ async function updateRewards() {
     const rewardPerOption = true;
     
     const { client_id, user_id } = await twitchValidate(token);
+    const container = document.querySelector("#container");
     container.classList.remove("validationFailed")
     
     if(!isEditorMode) {
