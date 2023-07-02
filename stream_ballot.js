@@ -342,6 +342,7 @@ async function updateRewards() {
     const rewardPerOption = true;
     
     const { client_id, user_id } = await twitchValidate(token);
+    container.classList.remove("validationFailed")
     
     if(!isEditorMode) {
       const existingRewards = await twitchReadRewards(token, client_id, user_id);
@@ -353,6 +354,8 @@ async function updateRewards() {
     connectEventSub({token, client_id, user_id});
   }
   catch (error) {
+    const container = document.querySelector("#container");
+    container.classList.add("validationFailed")
     console.error(error);
   }
   
