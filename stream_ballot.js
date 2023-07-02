@@ -221,7 +221,7 @@ function save() {
   SE_API.store.set(storeKey, {active, options, wasted});
 }
 
-function connectEventSub({token, client_id, user_id}, url = "wss://eventsub-beta.wss.twitch.tv/ws") {
+function connectEventSub({token, client_id, user_id}, url = "wss://eventsub.wss.twitch.tv/ws") {
   if(eventSubConnected) {
     return;
   }
