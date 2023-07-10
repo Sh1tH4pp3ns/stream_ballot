@@ -23,6 +23,17 @@ body {
   z-index: 2;
 }
 
+#wrapper {
+  display: flex;
+  flex-direction: {{goalPosition}};
+  align-items: center;
+  height: 100%;
+}
+
+#goal {
+  display: {{goalShow}};
+}
+
 .showOverlay {
   display: flex;
 }

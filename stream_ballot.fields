@@ -11,6 +11,36 @@
     "type": "button",
     "label": "Pause"
   },
+  "goalShow": {
+    "type": "dropdown",
+    "label": "Goal Visibility",
+    "value": "display",
+    "options": {
+      "display": "Show",
+      "none": "Hide"
+    }
+  },
+  "goal": {
+    "type": "number",
+    "label": "Goal",
+    "value": 100,
+    "min": 1,
+    "step": 1
+  },
+  "goalText": {
+    "type": "text",
+    "label": "Goal Text <sum> <goal> <percent>",
+    "value": "Wahlbeteiligung: <percent>%"
+  },
+  "goalPosition": {
+    "type": "dropdown",
+    "label": "Goal Position",
+    "value": "column",
+    "options": {
+      "column": "Top",
+      "column-reverse": "Bottom"
+    }
+  },
   "values": {
     "type": "text",
     "label": "Comma-Separated Values"

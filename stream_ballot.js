@@ -19,6 +19,8 @@ let eventSubConnected = false;
 let isEditorMode = true;
 let rewardLimit = false;
 let rewardLimitNumber = 1;
+let goal = 1;
+let goalText = "";
 
 window.addEventListener('onEventReceived', function (obj) {
   if (!obj.detail.event) {
@@ -187,6 +189,9 @@ function update(saveStatus = true, animate = true) {
     }
     document.querySelector(`#${option}-relative`).textContent = `${trimDigits(percent, maxDigits)}%`;
   });
+
+  const goalPercentage = goal ? (sum / goal) * 100  : 0
+  document.querySelector(`#goal`).textContent = goalText.replace("<percent>", trimDigits(goalPercentage, 0)).replace("<goal>", goal).replace("<sum>", sum);
   
   const overlay = document.querySelector("#overlay");
   overlay.style.display = active ? "none" : "flex";
@@ -543,6 +548,8 @@ window.addEventListener('onWidgetLoad', async function (obj) {
   twitchToken = fieldData["twitchToken"];
   rewardLimit = fieldData["rewardLimit"] || false;
   rewardLimitNumber = fieldData["rewardLimitNumber"] || 1;
+  goal = fieldData["goal"] || 1;
+  goalText = fieldData["goalText"] || "";
   providerId = obj.detail.channel.providerId;
   channelId = obj.detail.channel.id;
   tiers = {
